@@ -4,14 +4,13 @@ using UnityEngine;
 using System.Collections.Generic;
 using BepInEx.Configuration;
 using System.Reflection;
-using System.Dynamic;
-using System;
-using System.CodeDom;
+using System.Reflection.Emit;
+using VLB;
 
 namespace EnhancedEnemies.Patches
 {
-    [HarmonyPatch]
-    internal static class MyopicTurrets
+    /*[HarmonyPatch]
+    public static class MyopicTurrets
     {
         static float spread = 0.05f;
 
@@ -40,18 +39,116 @@ namespace EnhancedEnemies.Patches
 			__result = num > 0f;
             return false;
         }
+    }*/
+
+    [HarmonyPatch]
+    public static class TurretMain
+    {
+        internal static ConfigEntry<int> weight;internal static string[] coloredComponents = ["point_pivot/gun_pivot/armor_gun/armor_gun_viz", "point_pivot/gun_pivot/gun_assembly/ammo_box", "point_pivot/gun_pivot/gun_assembly/camera_armor", "point_pivot/gun_pivot/gun_assembly/gun", "base_physics/cutout/base_cutout_viz", "base_physics/standard/base_viz", "armor_base/armor_base_viz"];
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(TurretScript), nameof(TurretScript.Start))]
+        static void TurretSetup(TurretScript __instance)
+        {
+            int shotgunWeight = ShotgunTurrets.enabled.Value ? ShotgunTurrets.weight.Value : 0;
+            int lancerWeight = LancerTurrets.enabled.Value ? LancerTurrets.weight.Value : 0;
+            int random = (int) (Random(TurretSeed(__instance), "Turret Main") * (weight.Value + shotgunWeight + lancerWeight));
+            //Plugin.Logger.LogInfo(random);
+
+            if (random < shotgunWeight)
+            {
+                ShotgunTurrets.TurretSetup(__instance);
+            }
+            else if ((random -= shotgunWeight) < lancerWeight)
+            {
+                LancerTurrets.TurretSetup(__instance);
+            }
+        }
+
+        public static int TurretSeed(TurretScript turret)
+        {
+            int seed;
+            if (turret.kds.identifier == "")
+            {
+                seed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
+                turret.kds.identifier = seed.ToString();
+                return seed;
+            }
+            if (!int.TryParse(turret.kds.identifier, out seed))
+            {
+                seed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
+            }
+            return seed;
+        }
+
+        public static double Random(int seed, string name)
+        {
+            return ((double)(seed + name.GetHashCode())) / 4294967296L + .5;
+        }
+
+        internal static void VanillaExecuteTrajectory(BulletTrajectory trajectory)
+		{
+			ReceiverEvents.TriggerEvent(ReceiverEventTypeBulletTrajectory.Created, trajectory);
+			BulletTrajectoryManager.active_trajectories.Add(trajectory);
+		}
+
+        [HarmonyPatch(typeof(TurretScript), "UpdateLight")]
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator il)
+        {
+            Label setColor = il.DefineLabel();
+            Label notShotgun = il.DefineLabel();
+            Label isRegularTurret = il.DefineLabel();
+            Label end = il.DefineLabel();
+
+            return new CodeMatcher(instructions)
+                .MatchForward(false, new CodeMatch(OpCodes.Callvirt, AccessTools.Method(typeof(Light), "set_color")))
+                //for some reason, the color wont override unless i replace this line of code even though its the exact same line of code. ciarence's mod does the same thing
+                .SetAndAdvance(OpCodes.Callvirt, AccessTools.Method(typeof(Light), "set_color", [typeof(Color)]))
+                .InsertAndAdvance(
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(TurretScript), nameof(TurretScript.gun_pivot_camera_light))),
+
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(ShotgunTurrets), nameof(ShotgunTurrets.shotgunSet))),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(HashSet<TurretScript>), nameof(HashSet<TurretScript>.Contains))),
+                    new CodeInstruction(OpCodes.Brfalse_S, notShotgun),
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(ShotgunTurrets), nameof(ShotgunTurrets.color))),
+                    new CodeInstruction(OpCodes.Br_S, setColor),
+
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.lancerSet))).WithLabels([notShotgun]),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(HashSet<TurretScript>), nameof(HashSet<TurretScript>.Contains))),
+                    new CodeInstruction(OpCodes.Brfalse_S, isRegularTurret),
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.color))),
+                    
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(Light), "set_color", [typeof(Color)])).WithLabels([setColor]),
+                    new CodeInstruction(OpCodes.Br_S, end),
+
+                    new CodeInstruction(OpCodes.Pop).WithLabels([isRegularTurret])
+                )
+                .AddLabels([end])
+                .Instructions();
+        }
     }
 
     [HarmonyPatch]
-    internal static class ShotgunTurrets
+    public static class ShotgunTurrets
     {
+        internal static HashSet<TurretScript> shotgunSet = new HashSet<TurretScript>();
+        internal static FieldInfo mpb_info = AccessTools.Field(typeof(TurretScript), "mpb");
+        internal static FieldInfo color_id_info = AccessTools.Field(typeof(TurretScript), "color_id");
+        internal static AccessTools.FieldRef<TurretScript, MeshRenderer> flare_renderer_access = AccessTools.FieldRefAccess<TurretScript, MeshRenderer>("flare_renderer");
+        internal static AccessTools.FieldRef<TurretScript, VolumetricLightBeam> beam_access = AccessTools.FieldRefAccess<TurretScript, VolumetricLightBeam>("beam");
+        internal static AccessTools.FieldRef<TurretScript, Light> gun_pivot_camera_light_point_access = AccessTools.FieldRefAccess<TurretScript, Light>("gun_pivot_camera_light_point");
         internal static ConfigEntry<bool> enabled;
         internal static ConfigEntry<float> spread;
         internal static ConfigEntry<int> pellets;
-        internal static ConfigEntry<float> fireDelayMod;
-        internal static ConfigEntry<float> alertDelayMod;
-        internal static ConfigEntry<float> chance;
-        public static CartridgeSpec _00Pellet = Init00Pellet();
+        internal static ConfigEntry<float> fireInterval;
+        internal static ConfigEntry<float> alertDelay;
+        //internal static ConfigEntry<float> chance;
+        internal static ConfigEntry<int> weight;
+        internal static Color color = new(1f,0f,0f);
+        internal static CartridgeSpec _00Pellet = Init00Pellet();
 
         static CartridgeSpec Init00Pellet()
         {
@@ -70,25 +167,33 @@ namespace EnhancedEnemies.Patches
             return cs;
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(TurretScript), nameof(TurretScript.Start))]
-        static void TurretSetup(TurretScript __instance, ref CartridgeSpec ___cartridge_spec)
+        //[HarmonyPostfix]
+        //[HarmonyPatch(typeof(TurretScript), nameof(TurretScript.Start))]
+        internal static void TurretSetup(TurretScript __instance)
         {
-            if (UnityEngine.Random.value < chance.Value)
+            //if (new System.Random(TurretMain.TurretSeed(__instance) + "Shotgun Turrets".GetHashCode()).NextDouble() < chance.Value && enabled.Value)
             {
-                ___cartridge_spec = _00Pellet;
-                __instance.fire_interval *= fireDelayMod.Value;
-                __instance.blind_fire_interval *= fireDelayMod.Value;
+                shotgunSet.Add(__instance);
+                if (shotgunSet.Count >= 50)
+                {
+                    Plugin.Logger.LogWarning($"shotgun turret register abnormally large ({shotgunSet.Count}); you have an unusual number of turrets or they are not being deregistered");
+                }
+
+                __instance.fire_interval = fireInterval.Value;
+                __instance.blind_fire_interval = fireInterval.Value;
+                foreach (string s in TurretMain.coloredComponents)
+                {
+                    __instance.transform.Find(s).GetComponent<MeshRenderer>().material.color = color;
+                }
             }
         }
 
-        /*[HarmonyPostfix]
-        [HarmonyPatch(typeof(TurretScript), nameof(TurretScript.Start))]
-        static void ModFireDelay(TurretScript __instance)
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(TurretScript), nameof(TurretScript.OnDestroy))]
+        static void Deregister(TurretScript __instance)
         {
-            __instance.fire_interval *= fireDelayMod.Value;
-            __instance.blind_fire_interval *= fireDelayMod.Value;
-        }*/
+            shotgunSet.Remove(__instance);
+        }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(TurretScript), "UpdateCameraAlive")]
@@ -101,11 +206,11 @@ namespace EnhancedEnemies.Patches
         [HarmonyPatch(typeof(TurretScript), "UpdateCameraAlive")]
         static void AlertDelayPost(TurretScript __instance, ref float ___alert_delay, AIState __state)
         {
-			if (__instance.CanSeePlayer())
+			if (shotgunSet.Contains(__instance) && __instance.CanSeePlayer())
 			{
 				if (__state == AIState.Idle)
 				{
-					___alert_delay *= alertDelayMod.Value;
+					___alert_delay *= alertDelay.Value / 0.6f;
 				}
 			}
         }
@@ -114,10 +219,9 @@ namespace EnhancedEnemies.Patches
         [HarmonyPatch(typeof(BulletTrajectoryManager), nameof(BulletTrajectoryManager.ExecuteTrajectory))]
         static bool TurretShotgunShot(BulletTrajectory trajectory)
         {
-            //Plugin.Logger.LogInfo("ExecuteTrajectory");
-            if (enabled.Value && trajectory.cartridge_spec.Equals(_00Pellet) &&
-                (trajectory.bullet_source_entity_type == ReceiverEntityType.Turret ||
-                trajectory.bullet_source_entity_type == ReceiverEntityType.CeilingTurret))
+            if (shotgunSet.Contains(trajectory.bullet_source.GetComponent<TurretScript>()))// &&
+                //(trajectory.bullet_source_entity_type == ReceiverEntityType.Turret ||
+                //trajectory.bullet_source_entity_type == ReceiverEntityType.CeilingTurret))
             {
                 Vector3 start = trajectory.movement_events[0].start_pos;
                 Vector3 direction = trajectory.movement_events[0].end_pos - start;
@@ -129,7 +233,7 @@ namespace EnhancedEnemies.Patches
                     bt.draw_path = trajectory.draw_path;
                     bt.bullet_source = trajectory.bullet_source;
                     bt.bullet_source_entity_type = trajectory.bullet_source_entity_type;
-                    VanillaExecuteTrajectory(bt);
+                    TurretMain.VanillaExecuteTrajectory(bt);
                 }
                 return false;
             }
@@ -139,15 +243,460 @@ namespace EnhancedEnemies.Patches
             }
         }
 
-        static void VanillaExecuteTrajectory(BulletTrajectory trajectory)
-		{
-			ReceiverEvents.TriggerEvent(ReceiverEventTypeBulletTrajectory.Created, trajectory);
-			BulletTrajectoryManager.active_trajectories.Add(trajectory);
-		}
     }
 
     [HarmonyPatch]
-    internal static class SleepyTurrets
+    public static class LancerTurrets
+    {
+        internal static HashSet<TurretScript> lancerSet = [];
+        internal static ConfigEntry<bool> enabled;
+        internal static ConfigEntry<int> weight;
+        internal static ConfigEntry<float> fireInterval;
+        internal static ConfigEntry<float> alertDelay;
+        internal static ConfigEntry<float> sweepDuration;
+        internal static ConfigEntry<float> sweepSpeed;
+        internal static ConfigEntry<bool> fireViaSecurityCameraEnabled;
+        internal static ConfigEntry<float> groupSizeViaSecurityCamera;
+        internal static CartridgeSpec _50AP = Init50AP();
+        internal static Color color = new(0f,1f,0f);
+        internal static AccessTools.FieldRef<TurretScript, StochasticVision> vision_access = AccessTools.FieldRefAccess<TurretScript, StochasticVision>("vision");
+        internal static AccessTools.FieldRef<StochasticVision, float> kConsecutiveBlockedPerSecond_access = AccessTools.FieldRefAccess<StochasticVision, float>("kConsecutiveBlockedPerSecond");
+
+        static CartridgeSpec Init50AP()
+        {
+            CartridgeSpec cs = new()
+            {
+                gravity = true,
+                extra_mass = 60f,
+                mass = 42f,
+                speed = 999,
+                diameter = 0.013f,
+                density = 11340f * 1.5f
+            };
+            float num = cs.diameter * 0.5f;
+			float num2 = cs.mass / 1000f / cs.density;
+			cs.cylinder_length = num2 / (3.1415927f * num * num);
+            return cs;
+        }
+
+        internal static void TurretSetup(TurretScript __instance)
+        {
+            lancerSet.Add(__instance);
+            if (lancerSet.Count >= 50)
+            {
+                Plugin.Logger.LogWarning($"lancer turret register abnormally large ({lancerSet.Count}); you have an unusual number of turrets or they are not being deregistered");
+            }
+            __instance.fire_interval = fireInterval.Value;
+            __instance.blind_fire_interval = fireInterval.Value;
+            kConsecutiveBlockedPerSecond_access(vision_access(__instance)) = 40 / sweepDuration.Value;
+            foreach (string s in TurretMain.coloredComponents)
+            {
+                __instance.transform.Find(s).GetComponent<MeshRenderer>().material.color = color;
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(TurretScript), "UpdateCameraAlive")]
+        static void AlertDelayPre(ref AIState ___ai_state, out AIState __state)
+        {
+            __state = ___ai_state;
+        }
+        
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(TurretScript), "UpdateCameraAlive")]
+        static void AlertDelayPost(TurretScript __instance, ref float ___alert_delay, AIState __state)
+        {
+			if (lancerSet.Contains(__instance) && __instance.CanSeePlayer())
+			{
+				if (__state == AIState.Idle)
+				{
+					___alert_delay *= alertDelay.Value / 0.6f;
+				}
+			}
+        }
+        
+        /*public static int GetInstructionSize(OpCode opcode)
+        {
+            // 1. Calculate OpCode size
+            // Most are 1 byte, but some (like 'ldarg.0' or 'volatile.') are 2 bytes (prefixed with 0xFE)
+            int size = opcode.Size;
+
+            // 2. Add the size of the operand
+            size += opcode.OperandType switch
+            {
+                // No operand
+                OperandType.InlineNone => 0,
+
+                // 1-byte operands (Short branches, byte arguments)
+                OperandType.ShortInlineBrTarget => 1,
+                OperandType.ShortInlineI => 1,
+                OperandType.ShortInlineVar => 1,
+
+                // 2-byte operands (Char/Short)
+                OperandType.InlineVar => 2,
+
+                // 4-byte operands (Ints, Floats, Tokens, Branch Targets)
+                OperandType.InlineBrTarget => 4,
+                OperandType.InlineField => 4,
+                OperandType.InlineI => 4,
+                OperandType.InlineMethod => 4,
+                OperandType.InlineSig => 4,
+                OperandType.InlineString => 4,
+                OperandType.InlineType => 4,
+                OperandType.ShortInlineR => 4, // "Short" float is 32-bit (4 bytes)
+
+                // 8-byte operands (Longs, Doubles)
+                OperandType.InlineI8 => 8,
+                OperandType.InlineR => 8,
+
+                // Special case: Switch statement
+                // Format: uint32 count, followed by (count * int32) targets
+                // Note: This method cannot accurately size a 'switch' without knowing the target count.
+                OperandType.InlineSwitch => throw new ArgumentException("Switch opcode size depends on the number of targets."),
+
+                _ => 0
+            };
+
+            return size;
+        }*/
+    }
+
+    [HarmonyPatch]
+    public static class LancerTurrets_BypassPenCheck
+    {
+        [HarmonyPatch(typeof(BulletTrajectoryManager), nameof(BulletTrajectoryManager.PlanTrajectory))]
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator il)
+        {
+            Label bypassStuckInside = il.DefineLabel();
+            Label bypassStop = il.DefineLabel();
+            Label bypassRicochet = il.DefineLabel();
+            Label bypassRedirect = il.DefineLabel();
+
+            var codes = new List<CodeInstruction>(instructions);
+            int i = 0;
+
+            for (; i < codes.Count; i++)
+            {
+                Label endIf = il.DefineLabel();
+                //IL_017C
+                if (codes[i+2].opcode == OpCodes.Ldfld && ((FieldInfo)codes[i+2].operand) == AccessTools.Field(typeof(BallisticProperties), nameof(BallisticProperties.hollow)))
+                {
+                    yield return new CodeInstruction(OpCodes.Ldarg_1);
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets._50AP)));
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(object), nameof(object.Equals), [typeof(object), typeof(object)]));
+                    yield return new CodeInstruction(OpCodes.Brtrue_S, endIf);
+                    for (int j = 0; j < 4; j++)
+                        yield return codes[i++];
+                    yield return codes[i++].WithLabels([endIf]);
+                    break;
+                }
+                else yield return codes[i];
+            }
+            for (; i < codes.Count; i++)
+            {
+                //IL_021A
+                if (codes[i].opcode == OpCodes.Ldloc_S && ((LocalBuilder)codes[i].operand).LocalIndex == 18)
+                {
+                    yield return codes[i++];
+                    yield return codes[i++];
+                    yield return new CodeInstruction(OpCodes.Br_S, bypassStuckInside);
+                    /*yield return new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(Plugin), nameof(Plugin.Logger)));
+                    yield return new CodeInstruction(OpCodes.Ldstr, "sibypassbypass?");
+                    yield return new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(ManualLogSource), nameof(ManualLogSource.LogInfo)));*/
+                    break;
+                }
+                else yield return codes[i];
+            }
+            for (; i < codes.Count; i++)
+            {
+                //IL_02E3
+                if (codes[i].opcode == OpCodes.Ldloc_S && ((LocalBuilder)codes[i].operand).LocalIndex == 15)
+                {
+                    yield return codes[i++].WithLabels([bypassStuckInside]);
+                    break;
+                }
+                else yield return codes[i];
+            }
+
+            for (; i < codes.Count; i++)
+            {
+                Label endIf = il.DefineLabel();
+                //IL_038E
+                if (codes[i+1].opcode == OpCodes.Ldfld && ((FieldInfo)codes[i+1].operand) == AccessTools.Field(typeof(BallisticProperties), nameof(BallisticProperties.hollow)))
+                {
+                    yield return new CodeInstruction(OpCodes.Ldarg_1);
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets._50AP)));
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(object), nameof(object.Equals), [typeof(object), typeof(object)]));
+                    yield return new CodeInstruction(OpCodes.Brtrue_S, endIf);
+                    for (int j = 0; j < 3; j++)
+                        yield return codes[i++];
+                    yield return codes[i++].WithLabels([endIf]);
+                    break;
+                }
+                else yield return codes[i];
+            }
+
+            for (; i < codes.Count; i++)
+            {
+                Label endIf = il.DefineLabel();
+                //IL_06ED
+                if (codes[i].opcode == OpCodes.Ldloc_1
+                && codes[i+1].opcode == OpCodes.Ldloc_S && ((LocalBuilder)codes[i+1].operand).LocalIndex == 35)
+                {
+                    yield return codes[i++];
+                    yield return new CodeInstruction(OpCodes.Ldarg_1);
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets._50AP)));
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(object), nameof(object.Equals), [typeof(object), typeof(object)]));
+                    yield return new CodeInstruction(OpCodes.Brfalse_S, endIf);
+                    yield return new CodeInstruction(OpCodes.Pop);
+                    yield return new CodeInstruction(OpCodes.Br_S, bypassRicochet);
+                    yield return codes[i++].WithLabels([endIf]);
+                    break;
+                }
+                else yield return codes[i];
+            }
+
+            for (; i < codes.Count; i++)
+            {
+                //Label endIf = il.DefineLabel();
+                //IL_082C
+                if (codes[i+1].opcode == OpCodes.Stloc_S && ((LocalBuilder)codes[i+1].operand).LocalIndex == 39)
+                {
+                    yield return codes[i++].WithLabels([bypassRicochet]);
+                    yield return codes[i++];
+                    yield return new CodeInstruction(OpCodes.Ldarg_1);
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets._50AP)));
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(object), nameof(object.Equals), [typeof(object), typeof(object)]));
+                    yield return new CodeInstruction(OpCodes.Brtrue_S, bypassStop);
+                    //yield return new CodeInstruction(OpCodes.Br_S, bypassStop);
+                    yield return codes[i++];
+                    break;
+                }
+                else yield return codes[i];
+            }
+            for (; i < codes.Count; i++)
+            {
+                //IL_0B7F
+                if (codes[i].opcode == OpCodes.Ldloc_S && ((LocalBuilder)codes[i].operand).LocalIndex == 39)
+                {
+                    yield return codes[i++].WithLabels([bypassStop]);
+                    break;
+                }
+                else yield return codes[i];
+            }
+
+            for (; i < codes.Count; i++)
+            {
+                //IL_0E38
+                if (codes[i+4].opcode == OpCodes.Ldloc_S && ((LocalBuilder)codes[i+4].operand).LocalIndex == 56)
+                {
+                    yield return new CodeInstruction(OpCodes.Ldarg_1);
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets._50AP)));
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(object), nameof(object.Equals), [typeof(object), typeof(object)]));
+                    yield return new CodeInstruction(OpCodes.Brtrue_S, bypassRedirect);
+                    for (int j = 0; j < 8; j++)
+                        yield return codes[i++];
+                    yield return codes[i++].WithLabels([bypassRedirect]);
+                    break;
+                }
+                else yield return codes[i];
+            }
+
+            for (; i < codes.Count; i++)
+                yield return codes[i];
+        }
+    }
+
+    [HarmonyPatch]
+    public static class LancerTurrets_SetAmmo
+    {
+        [HarmonyPatch(typeof(TurretScript), "UpdateBarrel")]
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator il)
+        {
+            Label isRegularTurret = il.DefineLabel();
+            Label endif = il.DefineLabel();
+            Label setCartridge = il.DefineLabel();
+
+            return new CodeMatcher(instructions)
+                .MatchForward(false, new CodeMatch(OpCodes.Ldsfld, AccessTools.Field(typeof(TurretScript), "cartridge_spec")))
+                //.SetOperandAndAdvance(AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets._50AP)))
+                //.RemoveInstruction()
+                .Advance(1)
+                .InsertAndAdvance(
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.lancerSet))),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(HashSet<TurretScript>), nameof(HashSet<TurretScript>.Contains), [typeof(TurretScript)])),
+                    new CodeInstruction(OpCodes.Brfalse_S, isRegularTurret),
+                    new CodeInstruction(OpCodes.Pop),
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets._50AP))).WithLabels([setCartridge])
+                    /*new CodeInstruction(OpCodes.Stsfld, AccessTools.Field(typeof(TurretScript), "cartridge_spec"))*/
+                    /*new CodeInstruction(OpCodes.Br_S, endif),
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(TurretScript), "cartridge_spec")).WithLabels([isRegularTurret])*/
+                )
+                .AddLabels([isRegularTurret])
+                //.Advance(1)
+                //.AddLabels([endif])
+                /*.MatchForward(false, new CodeMatch(OpCodes.Call, AccessTools.Method(typeof(BulletTrajectoryCluster), nameof(BulletTrajectoryCluster.Evaluate))))
+                .SetInstruction(new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(BulletTrajectoryCluster), nameof(BulletTrajectoryCluster.Evaluate))))
+                .MatchBack(false, new CodeMatch(i => i.opcode == OpCodes.Brfalse_S))
+                .SetInstruction(new CodeInstruction(OpCodes.Brfalse_S, setCartridge))
+                .MatchBack(false, new CodeMatch(i => i.opcode == OpCodes.Ble_Un_S))
+                .SetInstruction(new CodeInstruction(OpCodes.Ble_Un_S, setCartridge))*/
+                .Instructions();
+        }
+    }
+
+    [HarmonyPatch]
+    public static class LancerTurrets_LeadAfterVisionLoss
+    {
+        [HarmonyPatch(typeof(TurretScript), "UpdateCameraAlive")]
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator il)
+        {
+            Label cannotSeeThisFrame = il.DefineLabel();
+            Label vanillaTargeting = il.DefineLabel();
+            Label endif = il.DefineLabel();
+            Label notExternalVision = il.DefineLabel();
+            Label noFire = il.DefineLabel();
+            //Label notJustLostSight = il.DefineLabel();
+
+            //var cm =
+            return new CodeMatcher(instructions)
+                //IL_0103
+                .MatchForward(false, new CodeMatch(OpCodes.Callvirt, AccessTools.Method(typeof(RobotScript), nameof(RobotScript.CanSeePlayer))))
+                .Advance(2)
+                .InsertAndAdvance(
+                    // if (lancerSet.contains(__instance) && !BestVision.can_see_player_this_frame)
+
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.lancerSet))),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(HashSet<TurretScript>), nameof(HashSet<TurretScript>.Contains), [typeof(TurretScript)])),
+                    new CodeInstruction(OpCodes.Brfalse_S, vanillaTargeting),
+
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(TurretScript), "get_BestVision")),
+                    new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(StochasticVision), nameof(StochasticVision.can_see_player_this_frame))),
+                    new CodeInstruction(OpCodes.Brtrue_S, vanillaTargeting),
+                    /*new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(TurretScript), "trigger_down")),
+                    new CodeInstruction(OpCodes.Brfalse_S, canSeeThisFrame),*/
+
+                    /*new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(Plugin), nameof(Plugin.Logger))),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(TurretScript), "get_BestVision")),
+                    new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(StochasticVision), "_consecutive_blocked")),
+                    new CodeInstruction(OpCodes.Box, typeof(float)),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(ManualLogSource), nameof(ManualLogSource.LogInfo))),*/
+
+                    //      if (BestVision._consecutive_blocked < 0.01f)
+
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(TurretScript), "get_BestVision")),
+                    new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(StochasticVision), "_consecutive_blocked")),
+                    new CodeInstruction(OpCodes.Ldc_R4, 0.2f),
+                    new CodeInstruction(OpCodes.Bge_S, cannotSeeThisFrame),
+
+                    //          target_pos = BestVision.last_spotted_point
+
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(TurretScript), "get_BestVision")),
+                    new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(StochasticVision), nameof(StochasticVision.last_spotted_point))),
+                    new CodeInstruction(OpCodes.Stfld, AccessTools.Field(typeof(RobotScript), "target_pos")),
+
+                    //      skip target_pos assignment
+                    new CodeInstruction(OpCodes.Br_S, cannotSeeThisFrame)
+                    
+                )
+                .AddLabels([vanillaTargeting])
+                .MatchForward(false, new CodeMatch(OpCodes.Stfld, AccessTools.Field(typeof(RobotScript), "target_pos")))
+                .Advance(1)
+                .MatchForward(false, new CodeMatch(OpCodes.Stfld, AccessTools.Field(typeof(RobotScript), "target_pos")))
+                .Advance(1)
+                .AddLabels([cannotSeeThisFrame])
+                //IL_025D
+                .MatchForward(true, new CodeMatch(OpCodes.Ldfld, AccessTools.Field(typeof(StochasticVision), nameof(StochasticVision.can_see_player))))
+                .Advance(1)
+                .RemoveInstruction()
+                //IL_0264
+                //.MatchForward(true, new CodeMatch(i => i.opcode == OpCodes.Stfld && ((FieldInfo)i.operand) == AccessTools.Field(typeof(TurretScript), "trigger_down")))
+                .InsertAndAdvance(
+                    // if (!vision.can_see_player && fireViaSecurityCameraEnable.Value) //that is, relying on external vision
+
+                    new CodeInstruction(OpCodes.Brtrue_S, notExternalVision),
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.fireViaSecurityCameraEnabled))),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(ConfigEntry<bool>), "get_Value")),
+                    new CodeInstruction(OpCodes.Brfalse_S, noFire),
+
+                    //      target_pos += Random.insideUnitSphere * groupSizeViaSecurityCamera.Value
+
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(RobotScript), "target_pos")),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(UnityEngine.Random), "get_insideUnitSphere")),
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.groupSizeViaSecurityCamera))),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(ConfigEntry<float>), "get_Value")),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(Vector3), "op_Multiply", [typeof(Vector3), typeof(float)])),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(Vector3), "op_Addition")),
+                    new CodeInstruction(OpCodes.Stfld, AccessTools.Field(typeof(RobotScript), "target_pos")),
+
+                    new CodeInstruction(OpCodes.Br_S, endif),
+
+                    // else if (lancerSet.contains(__instance) && !BestVision.can_see_player_this_frame)
+
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.lancerSet))).WithLabels([notExternalVision]),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(HashSet<TurretScript>), nameof(HashSet<TurretScript>.Contains))),
+                    new CodeInstruction(OpCodes.Brfalse_S, endif),
+
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(TurretScript), "get_BestVision")),
+                    new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(StochasticVision), nameof(StochasticVision.can_see_player_this_frame))),
+                    new CodeInstruction(OpCodes.Brtrue_S, endif),
+
+                    //      target_pos += target_vel.normalized * 2f * Time.deltaTime
+
+                    new CodeInstruction(OpCodes.Ldarg_0),//.WithLabels([notJustLostSight]),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldfld, AccessTools.Field(typeof(RobotScript), "target_pos")),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Ldflda, AccessTools.Field(typeof(TurretScript), "target_vel")),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(Vector3), "get_normalized")),
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.sweepSpeed))),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(ConfigEntry<float>), "get_Value")),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(Time), "get_deltaTime")),
+                    new CodeInstruction(OpCodes.Mul),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(Vector3), "op_Multiply", [typeof(Vector3), typeof(float)])),
+                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(Vector3), "op_Addition")),
+                    new CodeInstruction(OpCodes.Stfld, AccessTools.Field(typeof(RobotScript), "target_pos"))
+                )
+                .AddLabels([endif])
+                .MatchForward(false, new CodeMatch(OpCodes.Ret))
+                .AddLabels([noFire])
+                
+                .Instructions();
+
+            /*int offset = 0;
+            foreach(CodeInstruction c in cm)
+            {
+                Plugin.Logger.LogInfo($"{offset:X}: {c.ToString()}");
+                offset += LancerTurrets.GetInstructionSize((c.opcode));
+            }
+            return cm;*/
+        }
+    }
+
+    [HarmonyPatch]
+    public static class SleepyTurrets
     {
         private static Dictionary<TurretScript, float> sleepTimers = new Dictionary<TurretScript, float>();
         internal static AccessTools.FieldRef<TurretScript, AIState> state_access = AccessTools.FieldRefAccess<TurretScript, AIState>("ai_state");
@@ -191,16 +740,7 @@ namespace EnhancedEnemies.Patches
         [HarmonyPatch(typeof(TurretScript), nameof(TurretScript.Start))]
         static void TurretSetup(TurretScript __instance, ref float ___standby_wakeup_delay, ref AIState ___ai_state)
         {
-            if (__instance.kds.identifier == "")
-            {
-                __instance.kds.identifier = UnityEngine.Random.Range(int.MinValue, int.MaxValue).ToString();
-            }
-            int seed;
-            if (!int.TryParse(__instance.kds.identifier, out seed))
-            {
-                seed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
-            }
-            System.Random random = new System.Random(seed);
+            System.Random random = new System.Random(TurretMain.TurretSeed(__instance));
             double r = random.NextDouble();
             if (overrideLevelStartAsleepChance.Value)
             {
@@ -221,7 +761,7 @@ namespace EnhancedEnemies.Patches
                     sleepTimers[__instance] = sleepTimeout.Value;
                     if (sleepTimers.Count >= 50)
                     {
-                        Plugin.Logger.LogWarning($"turret register abnormally large ({sleepTimers.Count}); you have an unusual number of turrets or they are not being deregistered");
+                        Plugin.Logger.LogWarning($"sleepy turret register abnormally large ({sleepTimers.Count}); you have an unusual number of turrets or they are not being deregistered");
                     }
                 }
             }
@@ -255,6 +795,7 @@ namespace EnhancedEnemies.Patches
         
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TurretScript), "UpdateSensor")]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Method Declaration", "Harmony003:Harmony non-ref patch parameters modified", Justification = "im not modifying it dough")]
         static void OverrideWakeupDelayPost(TurretScript __instance, ref float ___standby_wakeup_delay, OverrideWakeupState __state)
         {
             if (__state.ai_state == AIState.Standby)
@@ -325,7 +866,7 @@ namespace EnhancedEnemies.Patches
             }
             if (cameraToDrone.Count >= 50)
             {
-                Plugin.Logger.LogWarning($"drone register abnormally large ({cameraToDrone.Count}); you have an unusual number of drones or they are not being deregistered");
+                Plugin.Logger.LogWarning($"sleepy drone register abnormally large ({cameraToDrone.Count}); you have an unusual number of drones or they are not being deregistered");
             }
         }
 
@@ -609,7 +1150,7 @@ namespace EnhancedEnemies.Patches
                     sleepTimers[__instance] = sleepTimeout.Value;
                     if (sleepTimers.Count >= 50)
                     {
-                        Plugin.Logger.LogWarning($"security camera register abnormally large ({sleepTimers.Count}); you have an unusual number of security cameras or they are not being deregistered");
+                        Plugin.Logger.LogWarning($"sleepy security camera register abnormally large ({sleepTimers.Count}); you have an unusual number of security cameras or they are not being deregistered");
                     }
                 }
                 __instance.StartCoroutine(DelayStartAsleep(__instance));

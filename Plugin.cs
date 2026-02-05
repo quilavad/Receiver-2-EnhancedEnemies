@@ -18,39 +18,100 @@ public class Plugin : BaseUnityPlugin
         Logger = base.Logger;
         Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
 
+        
+        TurretMain.weight = Config.Bind(
+            new ConfigDefinition("Turrets", "Regular turret chance weight"),
+            33,
+            new ConfigDescription("Determines the chance of a turret being a regular turret (not shotgun or lancer), in proportion to this weight divided by the total weight. 20 regular weight with 200 total weight means 10% regular chance",
+                new AcceptableValueRange<int>(0, 1000))
+        );
+/////////////////////////////////////////////////////////////////////////////////////////////////      
         ShotgunTurrets.enabled = Config.Bind(
             new ConfigDefinition("Shotgun Turrets", "Enabled"),
             true,
-            new ConfigDescription("Enables turrets to shoot multiple shotgun pellets instead of singular bullets")
+            new ConfigDescription("Enables spawning of turrets that shoot multiple shotgun pellets instead of singular bullets")
         );
         ShotgunTurrets.spread = Config.Bind(
             new ConfigDefinition("Shotgun Turrets", "Pellet spread"),
             15f,
-            new ConfigDescription("Angle, in degrees, of pellet spread cone", 
+            new ConfigDescription("Angle, in degrees, of pellet spread cone of shotgun turrets", 
                 new AcceptableValueRange<float>(0f, 180f))
         );
         ShotgunTurrets.pellets = Config.Bind(
             new ConfigDefinition("Shotgun Turrets", "Pellet count"),
             9,
-            new ConfigDescription("Number of pellets per shot", 
+            new ConfigDescription("Number of pellets per shot of shotgun turrets", 
                 new AcceptableValueRange<int>(1, 300))
         );
-        ShotgunTurrets.chance = Config.Bind(
+        /*ShotgunTurrets.chance = Config.Bind(
             new ConfigDefinition("Shotgun Turrets", "Chance"),
             0.5f,
             new ConfigDescription("Determines the proportion of turrets that are shotgun turrets. 0 means only regular turrets, 1 mean all shotgun turrets",
                 new AcceptableValueRange<float>(0f, 1f))
+        );*/
+        ShotgunTurrets.weight = Config.Bind(
+            new ConfigDefinition("Shotgun Turrets", "Chance Weight"),
+            33,
+            new ConfigDescription("Determines the chance of a turret being a shotgun turret, in proportion to this weight divided by the total weight. 20 shotgun weight with 200 total weight means 10% shotgun chance",
+                new AcceptableValueRange<int>(0, 1000))
         );
-        ShotgunTurrets.fireDelayMod = Config.Bind(
-            new ConfigDefinition("Shotgun Turrets", "Fire delay multiplier"),
-            4f,
-            new ConfigDescription("Fire delay for shotgun turrets is multiplied by this factor. 2 means half fire rate, 0.5 means double", 
+        ShotgunTurrets.fireInterval = Config.Bind(
+            new ConfigDefinition("Shotgun Turrets", "Fire interval"),
+            .4f,
+            new ConfigDescription("The interval, in seconds, between shots for shotgun turrets. Vanilla value is 0.1", 
+                new AcceptableValueRange<float>(0.001f, 10))
+        );
+        ShotgunTurrets.alertDelay = Config.Bind(
+            new ConfigDefinition("Shotgun Turrets", "Reaction time"),
+            .9f,
+            new ConfigDescription("Delay, in seconds, for the first shot after being spotting for shotgun turrets. Vanilla value is 0.6", 
+                new AcceptableValueRange<float>(0, 60))
+        );
+/////////////////////////////////////////////////////////////////////////////////////////////////
+        LancerTurrets.enabled = Config.Bind(
+            new ConfigDefinition("Lancer Turrets", "Enabled"),
+            true,
+            new ConfigDescription("Enables spawning of turrets that penetrate all barriers and will sweep through cover (with bullets) after losing the player")
+        );
+        LancerTurrets.weight = Config.Bind(
+            new ConfigDefinition("Lancer Turrets", "Chance weight"),
+            33,
+            new ConfigDescription("Determines the chance of a turret being a lancer turret, in proportion to this weight divided by the total weight. 20 lancer weight with 200 total weight means 10% lancer chance",
+                new AcceptableValueRange<int>(0, 1000))
+        );
+        LancerTurrets.fireInterval = Config.Bind(
+            new ConfigDefinition("Lancer Turrets", "Fire interval"),
+            .3f,
+            new ConfigDescription("The interval, in seconds, between shots for lancer turrets. Vanilla value is 0.1", 
+                new AcceptableValueRange<float>(0.001f, 10))
+        );
+        LancerTurrets.alertDelay = Config.Bind(
+            new ConfigDefinition("Lancer Turrets", "Reaction time"),
+            0.9f,
+            new ConfigDescription("Delay, in seconds, for the first shot after being spotting for lancer turrets. Vanilla value is 0.6", 
+                new AcceptableValueRange<float>(0, 60))
+        );
+        LancerTurrets.sweepDuration = Config.Bind(
+            new ConfigDefinition("Lancer Turrets", "Sweep duration"),
+            3f,
+            new ConfigDescription("Duration, in seconds, lancer turrets will continue to fire after losing the player before returning to idle state. Vanilla value is 0.667. Lancer turrets will attempt sweep through cover instead of shooting at the same spot", 
+                new AcceptableValueRange<float>(0, 60))
+        );
+        LancerTurrets.sweepSpeed = Config.Bind(
+            new ConfigDefinition("Lancer Turrets", "Sweep speed"),
+            2f,
+            new ConfigDescription("The speed, in Unity units, that lancer turrets will sweep through cover after losing the player. The product of this value and fire interval is proportional to the distance between sweeping shots. For reference, the player walks at a speed of 3, and runs at a speed of 6", 
                 new AcceptableValueRange<float>(0, 10))
         );
-        ShotgunTurrets.alertDelayMod = Config.Bind(
-            new ConfigDefinition("Shotgun Turrets", "Reaction time multiplier"),
+        LancerTurrets.fireViaSecurityCameraEnabled = Config.Bind(
+            new ConfigDefinition("Lancer Turrets", "Enable fire via security cameras"),
+            true,
+            new ConfigDescription("Enables lancer turrets to shoot if alerted by security cameras even if the turret does not have line of sight")
+        );
+        LancerTurrets.groupSizeViaSecurityCamera = Config.Bind(
+            new ConfigDefinition("Lancer Turrets", "Fire via security cameras group size"),
             1.5f,
-            new ConfigDescription("Delay for the first shot after being spotting for shotgun turrets is multiplied by this factor. 2 means double time to react, 0.5 means half", 
+            new ConfigDescription("The radius, in Unity units, of the bullet grouping of lancer turrets when firing through a security camera without its own line of sight. \"Enable fire via security cameras\" must be enabled to work",
                 new AcceptableValueRange<float>(0, 10))
         );
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -228,7 +289,12 @@ public class Plugin : BaseUnityPlugin
 
         _harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
         //_harmony.PatchAll(typeof(MyopicTurrets));
+        _harmony.PatchAll(typeof(TurretMain));
         _harmony.PatchAll(typeof(ShotgunTurrets));
+        _harmony.PatchAll(typeof(LancerTurrets));
+        _harmony.PatchAll(typeof(LancerTurrets_BypassPenCheck));
+        _harmony.PatchAll(typeof(LancerTurrets_SetAmmo));
+        _harmony.PatchAll(typeof(LancerTurrets_LeadAfterVisionLoss));
         _harmony.PatchAll(typeof(SleepyTurrets));
         _harmony.PatchAll(typeof(SleepyDrones));
         _harmony.PatchAll(typeof(SleepySecurityCameras));
