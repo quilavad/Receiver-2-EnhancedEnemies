@@ -7,8 +7,8 @@ The Threat has dreamt up some adjustments to our adversaries...
 
 Receiver, we have received transmissions that the Threat has been modifying the behaviors of some killdrones. Reports include the following:
 
- - **Lancer turrets**, that can penetrate any barrier and will sweep through cover (with bullets) after losing line of sight
- - **Shotgun turrets**, that shoot multiple pellets per shot
+ - **Lancer turrets**, that can penetrate any barrier and will sweep through cover (with bullets) after losing line of sight, with green camera lights
+ - **Shotgun turrets**, that shoot multiple pellets per shot, with red camera lights
  - **Sleeping killdrones**, that start with their camera off; behavior previously exhibited by only some grounded turrets now extend to ceiling turrets, drones, and security cameras
  - **Sleepy killdrones**; sleeping turrets, drones, and security cameras that go back to sleep after being awoken
  - **Security camera linked killdrones**; turrets and drones with destroyed cameras will still attack if a security camera can see you. Security cameras also alert if another security camera spots you

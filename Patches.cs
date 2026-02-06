@@ -560,7 +560,7 @@ namespace EnhancedEnemies.Patches
     public static class LancerTurrets_LeadAfterVisionLoss
     {
         [HarmonyPatch(typeof(TurretScript), "UpdateCameraAlive")]
-        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator il)
+        internal static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator il)
         {
             Label cannotSeeThisFrame = il.DefineLabel();
             Label vanillaTargeting = il.DefineLabel();
@@ -624,17 +624,21 @@ namespace EnhancedEnemies.Patches
                 .Advance(1)
                 .AddLabels([cannotSeeThisFrame])
                 //IL_025D
-                .MatchForward(true, new CodeMatch(OpCodes.Ldfld, AccessTools.Field(typeof(StochasticVision), nameof(StochasticVision.can_see_player))))
+                .MatchForward(false, new CodeMatch(OpCodes.Ldfld, AccessTools.Field(typeof(StochasticVision), nameof(StochasticVision.can_see_player))))
                 .Advance(1)
                 .RemoveInstruction()
                 //IL_0264
                 //.MatchForward(true, new CodeMatch(i => i.opcode == OpCodes.Stfld && ((FieldInfo)i.operand) == AccessTools.Field(typeof(TurretScript), "trigger_down")))
                 .InsertAndAdvance(
-                    // if (!vision.can_see_player && fireViaSecurityCameraEnable.Value) //that is, relying on external vision
+                    // if (!vision.can_see_player && fireViaSecurityCameraEnable.Value && lancerSet.contauns(__instance)) //that is, relying on external vision
 
                     new CodeInstruction(OpCodes.Brtrue_S, notExternalVision),
                     new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.fireViaSecurityCameraEnabled))),
                     new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(ConfigEntry<bool>), "get_Value")),
+                    new CodeInstruction(OpCodes.Brfalse_S, noFire),
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.lancerSet))),
+                    new CodeInstruction(OpCodes.Ldarg_0),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(HashSet<TurretScript>), nameof(HashSet<TurretScript>.Contains))),
                     new CodeInstruction(OpCodes.Brfalse_S, noFire),
 
                     //      target_pos += Random.insideUnitSphere * groupSizeViaSecurityCamera.Value
@@ -1381,11 +1385,15 @@ namespace EnhancedEnemies.Patches
             }
         }
 
-        [HarmonyReversePatch]
+        [HarmonyReversePatch(HarmonyReversePatchType.Snapshot)]
         [HarmonyPatch(typeof(TurretScript), "UpdateCameraAlive")]
         static void ReversePatch_UpdateCameraAlive(object instance)
         {
-            throw new System.NotImplementedException("method TurretScript.UpdateCameraAlive was not reverse patched");
+            //throw new System.NotImplementedException("method TurretScript.UpdateCameraAlive was not reverse patched");
+            IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator il)
+            {
+                return LancerTurrets_LeadAfterVisionLoss.Transpiler(instructions, il);
+            }
         }
 
         [HarmonyPrefix]

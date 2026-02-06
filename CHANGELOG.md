@@ -1,3 +1,8 @@
+### 1.1.2
+- Fixed non-lancer turrets shooting through security cameras without line of sight if the relevant option for lancer turrets was enabled
+- Lancer turrets with broken camera can now shoot without line of sight through security camera if relevant options are enabled
+- Update README to note shotgun and lancer turret camera light coloration
+
 ## 1.1.0
 - Lancer Turrets
 - Fixed regular turrets sometimes shooting pellets and shotgun turrets sometimes shooting bullets
