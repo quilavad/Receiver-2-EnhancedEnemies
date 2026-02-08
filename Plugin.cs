@@ -67,6 +67,16 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("Delay, in seconds, for the first shot after being spotting for shotgun turrets. Vanilla value is 0.6", 
                 new AcceptableValueRange<float>(0, 60))
         );
+        ShotgunTurrets.lightColor = Config.Bind(
+            new ConfigDefinition("Shotgun Turrets", "Camera light color"),
+            new UnityEngine.Color(1f,0f,0f),
+            new ConfigDescription("Determines the color of the camera lights of shotgun turrets. Vanilla color is 0000FFFF")
+        );
+        ShotgunTurrets.componentColor = Config.Bind(
+            new ConfigDefinition("Shotgun Turrets", "Component color"),
+            new UnityEngine.Color(1f,0.4f,0.4f),
+            new ConfigDescription("Determines the color of some componenets of lancer turrets. For vanilla color use FFFFFFFF")
+        );
 /////////////////////////////////////////////////////////////////////////////////////////////////
         LancerTurrets.enabled = Config.Bind(
             new ConfigDefinition("Lancer Turrets", "Enabled"),
@@ -114,6 +124,16 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("The radius, in Unity units, of the bullet grouping of lancer turrets when firing through a security camera without its own line of sight. \"Enable fire via security cameras\" must be enabled to work",
                 new AcceptableValueRange<float>(0, 10))
         );
+        LancerTurrets.lightColor = Config.Bind(
+            new ConfigDefinition("Lancer Turrets", "Camera light color"),
+            new UnityEngine.Color(0f,1f,0f),
+            new ConfigDescription("Determines the color of the camera lights of lancer turrets. Vanilla color is 0000FFFF")
+        );
+        LancerTurrets.componentColor = Config.Bind(
+            new ConfigDefinition("Lancer Turrets", "Component color"),
+            new UnityEngine.Color(0f,.4f,0f),
+            new ConfigDescription("Determines the color of some componenets of lancer turrets. For vanilla color use FFFFFFFF")
+        );
 /////////////////////////////////////////////////////////////////////////////////////////////////
         SleepyTurrets.overrideLevelStartAsleepChance = Config.Bind(
             new ConfigDefinition("Turret Sleep Control", "Override level start asleep chance"),
@@ -155,6 +175,11 @@ public class Plugin : BaseUnityPlugin
             0.5f,
             new ConfigDescription("Determines the proportion of turrets which start asleep that can go back to sleep. 0 mean no sleepy turrets, 1 mean all sleepy turrets", 
                 new AcceptableValueRange<float>(0f, 1f))
+        );
+        SleepyTurrets.componentColor = Config.Bind(
+            new ConfigDefinition("Sleepy Turrets", "Component color"),
+            new UnityEngine.Color(0.2f,0.2f,0.2f),
+            new ConfigDescription("Determines the color of the camera and sensor of sleepy turrets. For vanilla color use FFFFFFFF")
         );
 /////////////////////////////////////////////////////////////////////////////////////////////////
         SleepyDrones.startAsleepEnabled = Config.Bind(
@@ -210,6 +235,11 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("The range at which sleeping drones can detected the player in order to wake up. The range at which drones can see in vanilla is 20", 
                 new AcceptableValueRange<float>(0f, 360f))
         );*/
+        SleepyDrones.componentColor = Config.Bind(
+            new ConfigDefinition("Sleepy Drones", "Component color"),
+            new UnityEngine.Color(0.2f,0.2f,0.2f),
+            new ConfigDescription("Determines the color of the camera and sensor of sleepy drones. For vanilla color use FFFFFFFF")
+        );
 /////////////////////////////////////////////////////////////////////////////////////////////////
         SleepyDrones.sleepyEnabled = Config.Bind(
             new ConfigDefinition("Sleepy Drones", "Enabled"),
@@ -269,6 +299,11 @@ public class Plugin : BaseUnityPlugin
             0.5f,
             new ConfigDescription("Determines the proportion of security cameras which start asleep that can go back to sleep. 0 mean no sleepy security cameras, 1 mean all sleepy security cameras",
                 new AcceptableValueRange<float>(0f, 1f))
+        );
+        SleepySecurityCameras.componentColor = Config.Bind(
+            new ConfigDefinition("Sleepy Security Cameras", "Component color"),
+            new UnityEngine.Color(0.2f,0.2f,0.2f),
+            new ConfigDescription("Determines the color of sleepy security cameras. For vanilla color use FFFFFFFF")
         );
 /////////////////////////////////////////////////////////////////////////////////////////////////
         SecurityCameraLinkedEnemies.turretsEnabled = Config.Bind(

@@ -1,3 +1,7 @@
+### 1.1.3
+- Added configuration option for shotgun and lancer turret light and component colors
+- Added configurable component coloration for sleepy killdrones 
+
 ### 1.1.2
 - Fixed non-lancer turrets shooting through security cameras without line of sight if the relevant option for lancer turrets was enabled
 - Lancer turrets with broken camera can now shoot without line of sight through security camera if relevant options are enabled

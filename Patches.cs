@@ -44,7 +44,9 @@ namespace EnhancedEnemies.Patches
     [HarmonyPatch]
     public static class TurretMain
     {
-        internal static ConfigEntry<int> weight;internal static string[] coloredComponents = ["point_pivot/gun_pivot/armor_gun/armor_gun_viz", "point_pivot/gun_pivot/gun_assembly/ammo_box", "point_pivot/gun_pivot/gun_assembly/camera_armor", "point_pivot/gun_pivot/gun_assembly/gun", "base_physics/cutout/base_cutout_viz", "base_physics/standard/base_viz", "armor_base/armor_base_viz"];
+        internal static ConfigEntry<int> weight;
+        internal static string[] coloredComponents = ["point_pivot/gun_pivot/gun_assembly/ammo_box", "point_pivot/gun_pivot/gun_assembly/ammo_destroy/ammo_box_ammo_box_shard", "point_pivot/gun_pivot/gun_assembly/ammo_destroy/ammo_box_ammo_box_shard_001", "base_physics/cutout/base_cutout_viz", "base_physics/standard/base_viz", "armor_base/armor_base_viz"];
+        //"point_pivot/gun_pivot/gun_assembly/gun", 
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TurretScript), nameof(TurretScript.Start))]
@@ -112,14 +114,16 @@ namespace EnhancedEnemies.Patches
                     new CodeInstruction(OpCodes.Ldarg_0),
                     new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(HashSet<TurretScript>), nameof(HashSet<TurretScript>.Contains))),
                     new CodeInstruction(OpCodes.Brfalse_S, notShotgun),
-                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(ShotgunTurrets), nameof(ShotgunTurrets.color))),
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(ShotgunTurrets), nameof(ShotgunTurrets.lightColor))),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(ConfigEntry<Color>), "get_Value")),
                     new CodeInstruction(OpCodes.Br_S, setColor),
 
                     new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.lancerSet))).WithLabels([notShotgun]),
                     new CodeInstruction(OpCodes.Ldarg_0),
                     new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(HashSet<TurretScript>), nameof(HashSet<TurretScript>.Contains))),
                     new CodeInstruction(OpCodes.Brfalse_S, isRegularTurret),
-                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.color))),
+                    new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets.lightColor))),
+                    new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(ConfigEntry<Color>), "get_Value")),
                     
                     new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(Light), "set_color", [typeof(Color)])).WithLabels([setColor]),
                     new CodeInstruction(OpCodes.Br_S, end),
@@ -147,7 +151,8 @@ namespace EnhancedEnemies.Patches
         internal static ConfigEntry<float> alertDelay;
         //internal static ConfigEntry<float> chance;
         internal static ConfigEntry<int> weight;
-        internal static Color color = new(1f,0f,0f);
+        internal static ConfigEntry<Color> lightColor;
+        internal static ConfigEntry<Color> componentColor;
         internal static CartridgeSpec _00Pellet = Init00Pellet();
 
         static CartridgeSpec Init00Pellet()
@@ -183,7 +188,7 @@ namespace EnhancedEnemies.Patches
                 __instance.blind_fire_interval = fireInterval.Value;
                 foreach (string s in TurretMain.coloredComponents)
                 {
-                    __instance.transform.Find(s).GetComponent<MeshRenderer>().material.color = color;
+                    __instance.transform.Find(s).GetComponent<MeshRenderer>().material.color = componentColor.Value;
                 }
             }
         }
@@ -258,7 +263,8 @@ namespace EnhancedEnemies.Patches
         internal static ConfigEntry<bool> fireViaSecurityCameraEnabled;
         internal static ConfigEntry<float> groupSizeViaSecurityCamera;
         internal static CartridgeSpec _50AP = Init50AP();
-        internal static Color color = new(0f,1f,0f);
+        internal static ConfigEntry<Color> lightColor;
+        internal static ConfigEntry<Color> componentColor;
         internal static AccessTools.FieldRef<TurretScript, StochasticVision> vision_access = AccessTools.FieldRefAccess<TurretScript, StochasticVision>("vision");
         internal static AccessTools.FieldRef<StochasticVision, float> kConsecutiveBlockedPerSecond_access = AccessTools.FieldRefAccess<StochasticVision, float>("kConsecutiveBlockedPerSecond");
 
@@ -291,7 +297,7 @@ namespace EnhancedEnemies.Patches
             kConsecutiveBlockedPerSecond_access(vision_access(__instance)) = 40 / sweepDuration.Value;
             foreach (string s in TurretMain.coloredComponents)
             {
-                __instance.transform.Find(s).GetComponent<MeshRenderer>().material.color = color;
+                __instance.transform.Find(s).GetComponent<MeshRenderer>().material.color = componentColor.Value;
             }
         }
 
@@ -711,6 +717,8 @@ namespace EnhancedEnemies.Patches
         internal static ConfigEntry<float> sleepTimeout;
         internal static ConfigEntry<float> wakeupDelay;
         internal static ConfigEntry<float> firstWakeupExtraDelay;
+        internal static string[] coloredComponents = ["point_pivot/gun_pivot/armor_gun/armor_gun_viz", "point_pivot/gun_pivot/gun_assembly/camera_armor", "point_pivot/gun_pivot/gun_assembly/motion_sensor"];
+        internal static ConfigEntry<Color> componentColor;
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(TurretScript), nameof(TurretScript.Update))]
@@ -766,6 +774,10 @@ namespace EnhancedEnemies.Patches
                     if (sleepTimers.Count >= 50)
                     {
                         Plugin.Logger.LogWarning($"sleepy turret register abnormally large ({sleepTimers.Count}); you have an unusual number of turrets or they are not being deregistered");
+                    }
+                    foreach (string s in coloredComponents)
+                    {
+                        __instance.transform.Find(s).GetComponent<MeshRenderer>().material.color = componentColor.Value;
                     }
                 }
             }
@@ -847,6 +859,8 @@ namespace EnhancedEnemies.Patches
         internal static ConfigEntry<float> groundedChance;
         //internal static ConfigEntry<float> wakeupAngle;
         //internal static ConfigEntry<float> wakeUpRange;
+        internal static string[] coloredComponents = ["Back/Camera/Intact/camera_armor_001", "Back/Camera/Broken/camera_armor_shard", "Back/Camera/Broken/camera_armor_shard_001", "Back/Camera/Broken/camera_armor_shard_002", "Back/Camera/Broken/camera_armor_shard_003", "Back/Camera/Broken/camera_armor_shard_004", "Back/Camera/Broken/camera_armor_shard_005", "Front/Sensor/Intact/motion_sensor_001", "Front/Sensor/Broken/motion_sensor_shard", "Front/Sensor/Broken/motion_sensor_shard_001", "Front/Sensor/Broken/motion_sensor_shard_002", "Front/Sensor/Broken/motion_sensor_shard_003", "Front/Sensor/Broken/motion_sensor_shard_004", "Front/Sensor/Broken/motion_sensor_shard_005"];
+        internal static ConfigEntry<Color> componentColor;
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(ShockDrone), "Start")]
@@ -861,6 +875,10 @@ namespace EnhancedEnemies.Patches
                 if (sleepyEnabled.Value && UnityEngine.Random.value < sleepyChance.Value)
                 {
                     sleepTimers[__instance] = sleepTimeout.Value + firstSleepDelay;
+                    foreach (string s in coloredComponents)
+                    {
+                        __instance.transform.Find(s).GetComponent<MeshRenderer>().material.color = componentColor.Value;
+                    }
                 }
                 if (UnityEngine.Random.value < groundedChance.Value)
                 {
@@ -1140,6 +1158,8 @@ namespace EnhancedEnemies.Patches
         internal static ConfigEntry<bool> sleepyEnabled;
         internal static ConfigEntry<float> sleepTimeout;
         internal static ConfigEntry<float> sleepyChance;
+        internal static string[] coloredComponents = ["Assembly/Cover/Intact/viz", "Assembly/Cover/Broken/BrokenPart1/viz", "Assembly/Cover/Broken/BrokenPart2/viz", "Assembly/Cover/Broken/BrokenPart3/viz", "Assembly/Cover/Broken/BrokenPart4/viz", "Assembly/Cover/Broken/BrokenPart5/viz", "Assembly/Cover/Broken/BrokenPart6/viz", "Assembly/Cover/Broken/BrokenPart7/viz", "Assembly/Cover/Broken/BrokenPart8/viz", "Assembly/Cover/Broken/BrokenPart9/viz", "Assembly/Cover/Broken/BrokenPart10/viz", "Assembly/Cover/Broken/BrokenPart11/viz", "Assembly/Cover/Broken/BrokenPart12/viz", "Beam/Intact/viz", "Beam/Swivel/Intact/viz", "Base/Intact/viz", "Assembly/Camera/Intact/viz/Camera_Interior", "Assembly/Camera/Intact/viz/Camera_Rod"];
+        internal static ConfigEntry<Color> componentColor;
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SecurityCamera), "Start")]
@@ -1155,6 +1175,17 @@ namespace EnhancedEnemies.Patches
                     if (sleepTimers.Count >= 50)
                     {
                         Plugin.Logger.LogWarning($"sleepy security camera register abnormally large ({sleepTimers.Count}); you have an unusual number of security cameras or they are not being deregistered");
+                    }
+                    foreach (string s in coloredComponents)
+                    {
+                        //try 
+                        {
+                            __instance.transform.Find(s).GetComponent<MeshRenderer>().material.color = componentColor.Value;
+                        }
+                        //catch
+                        {
+                            //Plugin.Logger.LogWarning($"cant findd component {s}");
+                        }
                     }
                 }
                 __instance.StartCoroutine(DelayStartAsleep(__instance));
@@ -1189,7 +1220,7 @@ namespace EnhancedEnemies.Patches
         {
             if ((bool)CanSeePlayerAccess.Invoke(__instance, []))
             {
-                Plugin.Logger.LogInfo("spotted");
+                //Plugin.Logger.LogInfo("spotted");
                 __result = SecurityCameraState.Idle;
             }
             else

@@ -10,7 +10,7 @@ Receiver, we have received transmissions that the Threat has been modifying the 
  - **Lancer turrets**, that can penetrate any barrier and will sweep through cover (with bullets) after losing line of sight, with green camera lights
  - **Shotgun turrets**, that shoot multiple pellets per shot, with red camera lights
  - **Sleeping killdrones**, that start with their camera off; behavior previously exhibited by only some grounded turrets now extend to ceiling turrets, drones, and security cameras
- - **Sleepy killdrones**; sleeping turrets, drones, and security cameras that go back to sleep after being awoken
+ - **Sleepy killdrones**; sleeping turrets, drones, and security cameras that go back to sleep after being awoken, with black camera armor and sensors
  - **Security camera linked killdrones**; turrets and drones with destroyed cameras will still attack if a security camera can see you. Security cameras also alert if another security camera spots you
 
 ## Configuration
@@ -21,6 +21,8 @@ Some Receivers have also reported that they are able to exert some control over 
  - **Sweeping duration and speed** of lancer turrets
  - **Pellet count and spread** of shotgun turrets
  - **Fire rate and reaction speed** of shotgun and lancer turrets
+ - **Color of camera lights** of shotgun and lancer turrets
+ - **Color of componenets** of shotgun and lancer turrets and sleepy killdrones
  - **Wake up time** of sleeping killdrones
  - **Sleep timeout** of sleepy killdrones
 
