@@ -1,3 +1,6 @@
+### 1.1.4
+- Fix a bug in ballistics override that (maybe) causes turrets to get lanuched/disappear
+
 ### 1.1.3
 - Added configuration option for shotgun and lancer turret light and component colors
 - Added configurable component coloration for sleepy killdrones 

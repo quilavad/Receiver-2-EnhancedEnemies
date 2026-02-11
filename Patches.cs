@@ -407,7 +407,12 @@ namespace EnhancedEnemies.Patches
                 {
                     yield return codes[i++];
                     yield return codes[i++];
-                    yield return new CodeInstruction(OpCodes.Br_S, bypassStuckInside);
+                    yield return new CodeInstruction(OpCodes.Ldarg_1);
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(LancerTurrets), nameof(LancerTurrets._50AP)));
+                    yield return new CodeInstruction(OpCodes.Box, typeof(CartridgeSpec));
+                    yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(object), nameof(object.Equals), [typeof(object), typeof(object)]));
+                    yield return new CodeInstruction(OpCodes.Brtrue_S, bypassStuckInside);
                     /*yield return new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(Plugin), nameof(Plugin.Logger)));
                     yield return new CodeInstruction(OpCodes.Ldstr, "sibypassbypass?");
                     yield return new CodeInstruction(OpCodes.Callvirt, AccessTools.Method(typeof(ManualLogSource), nameof(ManualLogSource.LogInfo)));*/
@@ -1421,10 +1426,12 @@ namespace EnhancedEnemies.Patches
         static void ReversePatch_UpdateCameraAlive(object instance)
         {
             //throw new System.NotImplementedException("method TurretScript.UpdateCameraAlive was not reverse patched");
+            #pragma warning disable CS8321 // Local function is declared but never used - reverse patch transpile
             IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator il)
             {
                 return LancerTurrets_LeadAfterVisionLoss.Transpiler(instructions, il);
             }
+            #pragma warning restore CS8321 // Local function is declared but never used
         }
 
         [HarmonyPrefix]
