@@ -1454,16 +1454,30 @@ namespace EnhancedEnemies.Patches
         [HarmonyPatch(typeof(TurretScript), nameof(TurretScript.IsNeutralized))]
         static bool OverrideIsNeutralized(TurretScript __instance, ref bool __result)
         {
-            __result = !__instance.motor_alive || !__instance.battery_alive || !__instance.motion_sensor_alive || !__instance.ammo_alive;
-            return false;
+            if (turretsEnabled.Value)
+            {
+                __result = !__instance.motor_alive || !__instance.battery_alive || !__instance.motion_sensor_alive || !__instance.ammo_alive;
+                return false;
+            }
+            else
+            {
+                return true;
+            }
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(TurretScript), nameof(TurretScript.IsIncapacitated))]
         static bool OverrideIsIncapacitated(TurretScript __instance, ref bool __result, ref bool ___given_up, ref bool ___fell_off_world)
         {
-            __result = !__instance.battery_alive || ___given_up || ___fell_off_world || (!__instance.ammo_alive && __instance.bullets == 0);
-            return false;
+            if (turretsEnabled.Value)
+            {
+                __result = !__instance.battery_alive || ___given_up || ___fell_off_world || (!__instance.ammo_alive && __instance.bullets == 0);
+                return false;
+            }
+            else
+            {
+                return true;
+            }
         }
 
         [HarmonyPrefix]

@@ -1,5 +1,8 @@
+### 1.1.5
+- Turrets will use default `IsNeutralized` and `IsIncapacitated` if turret security camera link is disabled (meaning turrets will drop ammo after its camera is shot out if disabled)
+
 ### 1.1.4
-- Fix a bug in ballistics override that (maybe) causes turrets to get lanuched/disappear
+- Fix a bug in ballistics override that (maybe) causes turrets to get launched/disappear when shot
 
 ### 1.1.3
 - Added configuration option for shotgun and lancer turret light and component colors
@@ -18,7 +21,7 @@
 - Likewise replaced shotgun turret alert delay multiplier with absolute reaction time
 
 # 1.0.0
- - Shotgun Turrets
- - Sleeping Drones, Security Cameras
- - Sleepy Turrets, Drones, Security Cameras
- - Security Camera Linked Turrets, Drones, Security Cameras
+- Shotgun Turrets
+- Sleeping Drones, Security Cameras
+- Sleepy Turrets, Drones, Security Cameras
+- Security Camera Linked Turrets, Drones, Security Cameras
